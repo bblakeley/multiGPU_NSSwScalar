@@ -73,8 +73,8 @@ void writeData_mgpu( int nGPUs, int *NX_per_GPU, int *start_x, const int iter, c
 {
 	int i, j, k, n, idx;
 	char title[0x100];
-	// snprintf(title, sizeof(title), location, NX, Re, var, iter);
-	snprintf(title, sizeof(title), location, var, iter);
+	// snprintf(title, sizeof(title), SaveLocation, NX, Re, var, iter);
+	snprintf(title, sizeof(title), SaveLocation, var, iter);
 	printf("Saving data to %s \n", title);
 	FILE *out = fopen(title, "wb");
 	writeDouble(sizeof(double) * NX*NY*NZ, out);
@@ -212,7 +212,7 @@ void initializeScalarKernel_mgpu(int start_x, cufftDoubleReal *Z)
 	return;
 }
 
-void initializeFields(int nGPUs, int *start_x, int *NX_per_GPU, cufftDoubleReal **u, cufftDoubleReal **v, cufftDoubleReal **w, cufftDoubleReal **z)
+void initializeVelocity(int nGPUs, int *start_x, int *NX_per_GPU, cufftDoubleReal **u, cufftDoubleReal **v, cufftDoubleReal **w)
 {
 	int n;
 	for (n = 0; n<nGPUs; ++n){
@@ -222,6 +222,22 @@ void initializeFields(int nGPUs, int *start_x, int *NX_per_GPU, cufftDoubleReal 
 		const dim3 gridSize(divUp(NX_per_GPU[n], TX), divUp(NY, TY), divUp(NZ, TZ));
 
 		initializeVelocityKernel_mgpu<<<gridSize, blockSize>>>(start_x[n], u[n], v[n], w[n]);
+		printf("Data initialized on GPU #%d...\n",n);
+	}
+
+	return;
+
+}
+
+void initializeScalar(int nGPUs, int *start_x, int *NX_per_GPU, cufftDoubleReal **z)
+{
+	int n;
+	for (n = 0; n<nGPUs; ++n){
+		cudaSetDevice(n);
+
+		const dim3 blockSize(TX, TY, TZ);
+		const dim3 gridSize(divUp(NX_per_GPU[n], TX), divUp(NY, TY), divUp(NZ, TZ));
+
 		initializeScalarKernel_mgpu<<<gridSize, blockSize>>>(start_x[n], z[n]);
 		printf("Data initialized on GPU #%d...\n",n);
 	}
@@ -230,14 +246,13 @@ void initializeFields(int nGPUs, int *start_x, int *NX_per_GPU, cufftDoubleReal 
 
 }
 
-void importFields(int nGPUs, int *start_x, int *NX_per_GPU, double **h_u, double **h_v, double **h_w, double **h_z, cufftDoubleReal **u, cufftDoubleReal **v, cufftDoubleReal **w, cufftDoubleReal **z)
+void importVelocity(int nGPUs, int *start_x, int *NX_per_GPU, double **h_u, double **h_v, double **h_w, cufftDoubleReal **u, cufftDoubleReal **v, cufftDoubleReal **w)
 {	// Import data from file
 	int n;
 
 	loadData(nGPUs, start_x, NX_per_GPU, "u", h_u);
 	loadData(nGPUs, start_x, NX_per_GPU, "v", h_v);
 	loadData(nGPUs, start_x, NX_per_GPU, "w", h_w);
-	loadData(nGPUs, start_x, NX_per_GPU, "z", h_z);
 
 	// Copy data from host to device
 	printf("Copy results to GPU memory...\n");
@@ -247,6 +262,21 @@ void importFields(int nGPUs, int *start_x, int *NX_per_GPU, double **h_u, double
 		checkCudaErrors( cudaMemcpyAsync(u[n], h_u[n], sizeof(complex double)*NX_per_GPU[n]*NY*NZ2, cudaMemcpyDefault) );
 		checkCudaErrors( cudaMemcpyAsync(v[n], h_v[n], sizeof(complex double)*NX_per_GPU[n]*NY*NZ2, cudaMemcpyDefault) );
 		checkCudaErrors( cudaMemcpyAsync(w[n], h_w[n], sizeof(complex double)*NX_per_GPU[n]*NY*NZ2, cudaMemcpyDefault) );
+	}
+
+}
+
+void importScalar(int nGPUs, int *start_x, int *NX_per_GPU, double **h_z, cufftDoubleReal **z)
+{	// Import data from file
+	int n;
+
+	loadData(nGPUs, start_x, NX_per_GPU, "z", h_z);
+
+	// Copy data from host to device
+	printf("Copy results to GPU memory...\n");
+	for(n=0; n<nGPUs; ++n){
+		cudaSetDevice(n);
+		cudaDeviceSynchronize();
 		checkCudaErrors( cudaMemcpyAsync(z[n], h_z[n], sizeof(complex double)*NX_per_GPU[n]*NY*NZ2, cudaMemcpyDefault) );
 	}
 
@@ -1155,8 +1185,12 @@ int main (void)
 	// StartTimer();
 
 	// Launch CUDA kernel to initialize velocity field
-	// initializeFields(nGPUs, start_x, NX_per_GPU, u, v, w, z);
-	importFields(nGPUs, start_x, NX_per_GPU, h_u, h_v, h_w, h_z, u, v, w, z);
+	// initializeVelocity(nGPUs, start_x, NX_per_GPU, u, v, w);
+	importVelocity(nGPUs, start_x, NX_per_GPU, h_u, h_v, h_w, u, v, w);
+
+	// Initialize Scalar Field
+	initializeScalar(nGPUs, start_x, NX_per_GPU, z);
+	// importScalar(nGPUs, start_x, NX_per_GPU, h_z, z);
 
 	// Setup wavespace domain
 	initializeWaveNumbers(nGPUs, k);

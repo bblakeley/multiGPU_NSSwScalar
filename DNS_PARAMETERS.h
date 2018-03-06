@@ -2,6 +2,7 @@
 #define TX 8
 #define TY 8
 #define TZ 8
+#define nu (1/Re)
 
 // Define constants for problem
 #define NX 256
@@ -21,8 +22,9 @@
 #define Sc 0.7
 #define k_max (2.0/3.0*(double)NX/2.0)			// De-alias using the 2/3 truncation rule
 // #define k_max ( 15.0/32.0*(double)NX )		// De-alias using 15/32 truncation (from Weirong's thesis)
-#define location "/home/bblakeley/Documents/Research/DNS_Data/Isotropic/multiGPU/R2/%c.%i"
+#define SaveLocation "/home/bblakeley/Documents/Research/DNS_Data/Isotropic/multiGPU/R2/%c.%i"
 #define DataLocation "/home/bblakeley/Documents/Research/DNS_Data/Flamelet_Data/R2/%s.0"
+#define StatsLocation "/home/bblakeley/Documents/Research/DNS_Data/Isotropic/multiGPU/R2/stats/%s%g"
 
 /*
 // Define constants for problem
